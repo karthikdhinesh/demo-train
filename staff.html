@@ -131,33 +131,7 @@ function routeCard(t){return `<div class="map-card"><div class="map-inner"><div 
 function renderOverview(){document.getElementById('statTickets').textContent=tickets.filter(x=>x.status!=='Cancelled').length.toLocaleString();document.getElementById('statTrains').textContent=trains.filter(x=>x.status!=='Cancelled').length;document.getElementById('statDelayed').textContent=trains.filter(x=>x.status==='Delayed').length;document.getElementById('statIncidents').textContent=alerts.filter(x=>x.state!=='Resolved').length;document.getElementById('overviewTrains').innerHTML=trains.slice(0,4).map(t=>`<tr><td><div class="train-name">${esc(t.id)} · ${esc(t.name)}</div><div class="sub">${esc(t.from)} → ${esc(t.to)}</div></td><td>${esc(t.dep)}</td><td>${tagStatus(t.status)}</td><td>${t.delay?`${t.delay} min`:'—'}</td></tr>`).join('');document.getElementById('overviewTickets').innerHTML=tickets.slice(0,4).map(x=>`<tr><td><b>${esc(x.pnr)}</b></td><td>${esc(x.passenger)}</td><td>${esc(x.train)}</td><td>${tagStatus(x.status)}</td></tr>`).join('');let t=trains.find(x=>x.status==='Delayed')||trains[0];document.getElementById('overviewMap').innerHTML=routeCard(t);document.getElementById('overviewAlerts').innerHTML=alerts.filter(x=>x.state!=='Resolved').slice(0,3).map(a=>`<div class="alert"><div class="alert-icon">⚑</div><div><b>${esc(a.title)} ${tagStatus(a.priority)}</b><small>${esc(a.id)} · ${esc(a.place)} · ${esc(a.state)}</small></div></div>`).join('')||'<div class="empty">No open alerts.</div>'}
 function refreshTicketTrainSelect(){const sel=document.getElementById('ticketTrainSelect');if(!sel)return;const prev=sel.value;sel.innerHTML='<option value="">Select a train to view passenger manifest…</option>'+trains.map(t=>`<option value="${esc(t.id)}">${esc(t.id)} · ${esc(t.name)} (${esc(t.from)} → ${esc(t.to)})</option>`).join('');if(trains.some(t=>t.id===prev))sel.value=prev}
 function renderTrainManifest(){const sel=document.getElementById('ticketTrainSelect'),id=sel?.value||'',t=trains.find(x=>x.id===id);const body=document.getElementById('manifestTable'),summary=document.getElementById('manifestSummary');if(!id||!t){body.innerHTML='<tr><td colspan="7" class="empty">Select a train above.</td></tr>';summary.textContent='Choose a train to view its passenger list and generate a print-ready PDF.';return}const rows=tickets.filter(x=>x.train===id&&x.status!=='Cancelled');summary.textContent=`${t.id} · ${t.name} | ${t.from} → ${t.to} | Journey date(s) shown per passenger | ${rows.length} active ticket record(s). Sample data only.`;body.innerHTML=rows.map((x,i)=>`<tr><td>${i+1}</td><td><b>${esc(x.pnr)}</b></td><td>${esc(x.passenger)}</td><td>${esc(x.date)}</td><td>${esc(x.cls)}</td><td>${esc(x.seat||'Not assigned in sample')}</td><td>${tagStatus(x.status)}</td></tr>`).join('')||'<tr><td colspan="7" class="empty">No active passenger records for this train.</td></tr>'}
-function exportManifestPDF(){const id=document.getElementById('ticketTrainSelect')?.value,t=trains.find(x=>x.id===id);if(!t){toast('Select a train first.');return}const rows=tickets.filter(x=>x.train===id&&x.status!=='Cancelled');const w=window.open('','_blank');if(!w){toast('Allow pop-ups to create the PDF print view.');return}const escPdf=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));w.document.write(`<!doctype html><html><head><title>Passenger Manifest - ${escPdf(t.id)}</title><meta charset="utf-8"><style>body{font:12px Arial,sans-serif;color:#17233b;padding:28px}h1{font-size:22px;margin-bottom:5px}.muted{color:#56647b}table{border-collapse:collapse;width:100%;margin-top:22px}th,td{border:1px solid #cfd7e3;padding:9px;text-align:left}th{background:#edf2fa;font-size:10px;text-transform:uppercase}footer{margin-top:25px;font-size:10px;color:#68758a}@media print{button{display:none}body{padding:0}}</style></head><body><h1>Passenger Manifest</h1><b>${escPdf(t.id)} · ${escPdf(t.name)}</b><p class="muted">${escPdf(t.from)} → ${escPdf(t.to)} | Departure ${escPdf(t.dep)} | Arrival ${escPdf(t.arr)} | Platform ${escPdf(t.platform)}</p><p>Generated: ${escPdf(new Date().toLocaleString())} · Passenger records: ${rows.length}</p><table><thead><tr><th>#</th><th>PNR</th><th>Passenger</th><th>Journey date</th><th>Class</th><th>Seat / berth</th><th>Status</th></tr></thead><tbody>${rows.map((x,i)=>`<tr><td>${i+1}</td><td>${escPdf(x.pnr)}</td><td>${escPdf(x.passenger)}</td><td>${escPdf(x.date)}</td><td>${escPdf(x.cls)}</td><td>${escPdf(x.seat||'Not assigned')}</td><td>${escPdf(x.status)}</td></tr>`).join('')}</tbody></table><footer>DEMO MANIFEST — not an official railway passenger list. Verify identity, data access permissions and booking status in the authorised system before operational use.</footer><p><button onclick="window.print()">Print / Save as PDF</button></p><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script>
-<script>
-/* Optional local RailOps API bridge. Start server.js to enable shared data between tabs/devices on the same network. */
-const RAILOPS_API='/api';
-async function railOpsPull(){
- try{
-  const r=await fetch(RAILOPS_API+'/state');if(!r.ok)return;const state=await r.json();
-  if(Array.isArray(state.trains)&&state.trains.length)trains=state.trains;
-  if(Array.isArray(state.tickets)&&state.tickets.length){
-   // API tickets are normalized passenger-level rows; retain locally-created records when absent from server.
-   tickets=state.tickets;
-  }
-  if(Array.isArray(state.alerts)&&state.alerts.length)alerts=state.alerts;
-  if(Array.isArray(state.staff)&&state.staff.length)staff=state.staff;
-  renderAll();
- }catch(e){/* server is optional while viewing this standalone prototype */}
-}
-async function railOpsPush(){
- try{await fetch(RAILOPS_API+'/state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trains,tickets,alerts,staff,audit})})}catch(e){}
-}
-const originalSave=save;
-save=function(){originalSave();railOpsPush()};
-const originalRenderTickets=renderTickets;
-renderTickets=function(){originalRenderTickets();};
-setInterval(railOpsPull,3000);
-railOpsPull();
-</script>
+function exportManifestPDF(){const id=document.getElementById('ticketTrainSelect')?.value,t=trains.find(x=>x.id===id);if(!t){toast('Select a train first.');return}const rows=tickets.filter(x=>x.train===id&&x.status!=='Cancelled');const w=window.open('','_blank');if(!w){toast('Allow pop-ups to create the PDF print view.');return}const escPdf=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));w.document.write(`<!doctype html><html><head><title>Passenger Manifest - ${escPdf(t.id)}</title><meta charset="utf-8"><style>body{font:12px Arial,sans-serif;color:#17233b;padding:28px}h1{font-size:22px;margin-bottom:5px}.muted{color:#56647b}table{border-collapse:collapse;width:100%;margin-top:22px}th,td{border:1px solid #cfd7e3;padding:9px;text-align:left}th{background:#edf2fa;font-size:10px;text-transform:uppercase}footer{margin-top:25px;font-size:10px;color:#68758a}@media print{button{display:none}body{padding:0}}</style></head><body><h1>Passenger Manifest</h1><b>${escPdf(t.id)} · ${escPdf(t.name)}</b><p class="muted">${escPdf(t.from)} → ${escPdf(t.to)} | Departure ${escPdf(t.dep)} | Arrival ${escPdf(t.arr)} | Platform ${escPdf(t.platform)}</p><p>Generated: ${escPdf(new Date().toLocaleString())} · Passenger records: ${rows.length}</p><table><thead><tr><th>#</th><th>PNR</th><th>Passenger</th><th>Journey date</th><th>Class</th><th>Seat / berth</th><th>Status</th></tr></thead><tbody>${rows.map((x,i)=>`<tr><td>${i+1}</td><td>${escPdf(x.pnr)}</td><td>${escPdf(x.passenger)}</td><td>${escPdf(x.date)}</td><td>${escPdf(x.cls)}</td><td>${escPdf(x.seat||'Not assigned')}</td><td>${escPdf(x.status)}</td></tr>`).join('')}</tbody></table><footer>DEMO MANIFEST — not an official railway passenger list. Verify identity, data access permissions and booking status in the authorised system before operational use.</footer><p><button onclick="window.print()">Print / Save as PDF</button></p>\x3cscript>window.onload=()=>setTimeout(()=>window.print(),250)<\/script>
 
 </body></html>`);w.document.close()}
 function renderTickets(){let q=(document.getElementById('ticketSearch')?.value||'').toLowerCase(),st=document.getElementById('ticketStatus')?.value||'';let rows=tickets.filter(x=>(!st||x.status===st)&&[x.pnr,x.passenger,x.train,trainName(x.train)].join(' ').toLowerCase().includes(q));document.getElementById('ticketsTable').innerHTML=rows.map(x=>`<tr><td><b>${esc(x.pnr)}</b></td><td>${esc(x.passenger)}</td><td><div class="train-name">${esc(trainName(x.train))}</div></td><td>${esc(x.date)}</td><td>${esc(x.cls)}</td><td>${tagStatus(x.status)}</td><td><div class="actions">${x.status!=='Cancelled'?`<button class="btn small" onclick="viewTicket('${x.pnr}')">View</button><button class="btn small danger" onclick="cancelTicket('${x.pnr}')">Cancel</button>`:`<button class="btn small" onclick="viewTicket('${x.pnr}')">Details</button>`}</div></td></tr>`).join('')||'<tr><td colspan="7" class="empty">No matching tickets.</td></tr>';document.getElementById('ticketCount').textContent=`Showing ${rows.length} of ${tickets.length} demo ticket records.`;refreshTicketTrainSelect();renderTrainManifest()}
@@ -192,30 +166,34 @@ renderAll();initClock();setInterval(initClock,1000);
 </script>
 
 <script>
-/* Optional local RailOps API bridge. Start server.js to enable shared data between tabs/devices on the same network. */
-const RAILOPS_API='/api';
-async function railOpsPull(){
- try{
-  const r=await fetch(RAILOPS_API+'/state');if(!r.ok)return;const state=await r.json();
-  if(Array.isArray(state.trains)&&state.trains.length)trains=state.trains;
-  if(Array.isArray(state.tickets)&&state.tickets.length){
-   // API tickets are normalized passenger-level rows; retain locally-created records when absent from server.
-   tickets=state.tickets;
-  }
-  if(Array.isArray(state.alerts)&&state.alerts.length)alerts=state.alerts;
-  if(Array.isArray(state.staff)&&state.staff.length)staff=state.staff;
-  renderAll();
- }catch(e){/* server is optional while viewing this standalone prototype */}
+// Shared online demo data. Staff API calls use the same-origin login session.
+const RAILOPS_API = '/api';
+async function railOpsPull() {
+  try {
+    const r = await fetch(RAILOPS_API + '/state', { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) return;
+    const state = await r.json();
+    if (Array.isArray(state.trains) && state.trains.length) trains = state.trains;
+    if (Array.isArray(state.tickets)) tickets = state.tickets;
+    if (Array.isArray(state.alerts)) alerts = state.alerts;
+    if (Array.isArray(state.staff)) staff = state.staff;
+    if (Array.isArray(state.audit)) audit = state.audit;
+    renderAll();
+  } catch (e) { console.warn('RailOps shared data is temporarily unavailable.', e); }
 }
-async function railOpsPush(){
- try{await fetch(RAILOPS_API+'/state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trains,tickets,alerts,staff,audit})})}catch(e){}
+async function railOpsPush() {
+  try {
+    await fetch(RAILOPS_API + '/state', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trains, tickets, alerts, staff, audit })
+    });
+  } catch (e) { console.warn('Could not save shared RailOps demo data.', e); }
 }
-const originalSave=save;
-save=function(){originalSave();railOpsPush()};
-const originalRenderTickets=renderTickets;
-renderTickets=function(){originalRenderTickets();};
-setInterval(railOpsPull,3000);
+const railOpsOriginalSave = save;
+save = function () { railOpsOriginalSave(); railOpsPush(); };
 railOpsPull();
+setInterval(railOpsPull, 5000);
 </script>
 
 </body>
